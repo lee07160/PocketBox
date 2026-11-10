@@ -4,6 +4,9 @@ struct SettingsView: View {
     @EnvironmentObject private var state: AppState
     @State private var showingAdd = false
     @State private var showingClearConfirm = false
+    @State private var parseName = ""
+    @State private var parseURL = ""
+    @State private var parseType = 1
 
     var body: some View {
         List {
@@ -42,9 +45,9 @@ struct SettingsView: View {
                 statRow("播放记录", "\(state.history.count)")
             }
 
-            Section("解析器") {
+            Section {
                 if state.parses.isEmpty {
-                    Text("接口里没有提供 parses")
+                    Text("接口里没有提供 parses，可以在下面手动加一个")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -55,6 +58,34 @@ struct SettingsView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                    }
+                }
+                .onDelete { indexSet in
+                    let targets = indexSet.compactMap { index in
+                        index < state.parses.count ? state.parses[index] : nil
+                    }
+                    targets.forEach { state.removeParse($0) }
+                }
+            } header: {
+                Text("解析器")
+            } footer: {
+                Text("type 1（JSON）：请求「解析地址 + 视频页地址」，从返回的 JSON 里取直链；type 0（网页）：把拼好的地址丢进内置浏览器。NAS 上自建的解析服务按 type 1 填。")
+            }
+
+            Section("添加解析接口") {
+                TextField("名称，可留空", text: $parseName)
+                TextField("http://192.168.1.10:8080/parse?url=", text: $parseURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                Picker("返回类型", selection: $parseType) {
+                    Text("JSON 接口（type 1）").tag(1)
+                    Text("网页解析（type 0）").tag(0)
+                }
+                Button("添加解析接口") {
+                    if state.addParse(urlString: parseURL, name: parseName, type: parseType) {
+                        parseURL = ""
+                        parseName = ""
                     }
                 }
             }

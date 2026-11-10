@@ -188,7 +188,7 @@ struct SniffingPlayer: View {
                 NativePlayerView(url: url, startAt: startAt, onProgress: onProgress)
             }
         case .webview:
-            if let parse = parses.first,
+            if let parse = parses.first(where: { $0.type != 1 }),
                let webURL = PlaybackRouter.parseURL(parse: parse, video: urlString) {
                 WebPlayerView(url: webURL)
             } else {
@@ -228,8 +228,15 @@ struct SniffingPlayer: View {
             phase = .playing
             return
         }
-        // 2) 兜底：接口自带解析器则走网页解析，没有就直开原页面
-        phase = parses.isEmpty ? .page : .webview
+        // 2) JSON 解析接口（parses 里 type = 1，自建服务/第三方 API 都是这个形状）
+        if let found = await ParseService.resolveAny(parses: parses, video: urlString),
+           let url = URL(string: found) {
+            sniffedURL = url
+            phase = .playing
+            return
+        }
+        // 3) 兜底：网页解析器（type 0）→ 原页面
+        phase = parses.contains(where: { $0.type != 1 }) ? .webview : .page
     }
 }
 

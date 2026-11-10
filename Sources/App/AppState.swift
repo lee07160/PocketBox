@@ -183,6 +183,34 @@ final class AppState: ObservableObject {
         return added
     }
 
+    // MARK: - 自定义解析接口
+
+    /// 填一个解析服务地址（NAS 上自建的、或者第三方的 JSON 接口都行）。
+    /// type = 1：GET 解析地址 + 视频页地址，返回 JSON 里带直链；
+    /// type = 0：网页解析器，把拼好的地址丢进内置浏览器。
+    @discardableResult
+    func addParse(urlString: String, name: String, type: Int) -> Bool {
+        let raw = urlString.trimmed()
+        guard raw.isHTTPURL else {
+            toast = "解析地址要以 http:// 或 https:// 开头"
+            return false
+        }
+        guard !parses.contains(where: { $0.url == raw }) else {
+            toast = "这个解析地址已经加过了"
+            return false
+        }
+        let label = name.trimmed().isEmpty ? "自定义解析" : name.trimmed()
+        parses.append(Parse(name: label, type: type, url: raw))
+        save()
+        toast = "已添加解析接口「\(label)」"
+        return true
+    }
+
+    func removeParse(_ parse: Parse) {
+        parses.removeAll { $0.id == parse.id }
+        save()
+    }
+
     func refreshAll() async {
         guard !subscriptions.isEmpty else { return }
         isLoading = true
