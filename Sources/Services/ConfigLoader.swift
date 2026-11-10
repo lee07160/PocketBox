@@ -13,16 +13,16 @@ enum ConfigLoader {
     /// 从网络拉取接口 JSON
     static func load(urlString: String) async throws -> LoadedConfig {
         let data = try await Net.fetch(urlString)
-        return try parse(data: data)
+        return try parse(data: data, sourceURL: urlString)
     }
 
-    static func parse(data: Data) throws -> LoadedConfig {
+    static func parse(data: Data, sourceURL: String? = nil) throws -> LoadedConfig {
         let raw = try? JSONSerialization.jsonObject(with: data)
         guard let root = raw as? [String: Any] else { throw NetError.decode }
-        return parse(root: root)
+        return parse(root: root, sourceURL: sourceURL)
     }
 
-    static func parse(root: [String: Any]) -> LoadedConfig {
+    static func parse(root: [String: Any], sourceURL: String? = nil) -> LoadedConfig {
         var config = LoadedConfig()
 
         if let rows = root["sites"] as? [[String: Any]] {
@@ -68,6 +68,26 @@ enum ConfigLoader {
                     epg: JSONValue.string(dict["epg"]).trimmed()
                 )
             }
+        }
+
+        // 裸苹果CMS接口直接导入：{code,msg,list:[{vod_id,vod_name,...}]}
+        // 包装成只有一个站点的配置，api 就是导入地址本身
+        if config.sites.isEmpty,
+           let rows = root["list"] as? [[String: Any]],
+           let first = rows.first,
+           first["vod_id"] != nil || first["vod_name"] != nil,
+           let base = sourceURL?.trimmed(), base.isHTTPURL {
+            let host = URL(string: base)?.host ?? base
+            config.sites = [Site(
+                key: host,
+                name: host,
+                type: 1,
+                api: base,
+                searchable: true,
+                quickSearch: true,
+                ext: "",
+                playerType: ""
+            )]
         }
 
         if let rows = root["urls"] as? [[String: Any]] {
