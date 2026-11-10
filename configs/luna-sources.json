@@ -1,0 +1,76 @@
+{
+  "sites": [
+    {
+      "key": "caiji_maotaizy_cc",
+      "name": "茅台资源",
+      "type": 1,
+      "api": "https://caiji.maotaizy.cc/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "caiji_dyttzyapi_com",
+      "name": "电影天堂",
+      "type": 1,
+      "api": "http://caiji.dyttzyapi.com/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "api_maoyanapi_top",
+      "name": "猫眼资源",
+      "type": 1,
+      "api": "https://api.maoyanapi.top/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "360zyzz_com",
+      "name": "360 资源",
+      "type": 1,
+      "api": "https://360zyzz.com/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "api_xinlangapi_com",
+      "name": "新浪资源",
+      "type": 1,
+      "api": "https://api.xinlangapi.com/xinlangapi.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "subocaiji_com",
+      "name": "速播资源",
+      "type": 1,
+      "api": "https://subocaiji.com/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "api_ukuapi88_com",
+      "name": "U酷影视",
+      "type": 1,
+      "api": "https://api.ukuapi88.com/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "caiji_moduapi_cc",
+      "name": "魔都动漫",
+      "type": 1,
+      "api": "https://caiji.moduapi.cc/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    },
+    {
+      "key": "hhzyapi_com",
+      "name": "豪华资源",
+      "type": 1,
+      "api": "https://hhzyapi.com/api.php/provide/vod",
+      "searchable": true,
+      "quickSearch": true
+    }
+  ]
+}
