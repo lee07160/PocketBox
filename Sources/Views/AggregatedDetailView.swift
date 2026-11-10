@@ -27,6 +27,11 @@ struct AggregatedDetailView: View {
         return hits.first(where: { !$0.item.pic.isEmpty })?.item ?? current
     }
 
+    /// 同一个片名下出现多个年份 → 说明是同名翻拍，源标签要带年份
+    private var hasYearConflict: Bool {
+        Set(hits.map { $0.item.year }.filter { !$0.isEmpty }).count > 1
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -148,9 +153,17 @@ struct AggregatedDetailView: View {
         let loaded = details[hit.id]
         let count = (loaded ?? hit.item).bestEpisodeCount
         let tag: String = {
-            let remarks = (loaded ?? hit.item).remarks
-            if !remarks.isEmpty { return remarks }
-            return count > 0 ? "\(count)集" : "未知"
+            let item = loaded ?? hit.item
+            let remarks = item.remarks
+            let base: String
+            if !remarks.isEmpty {
+                base = remarks
+            } else {
+                base = count > 0 ? "\(count)集" : "未知"
+            }
+            // 同名不同年份（翻拍）时把年份带上，避免选错版本
+            if hasYearConflict, !item.year.isEmpty { return item.year + " · " + base }
+            return base
         }()
 
         return Button {
