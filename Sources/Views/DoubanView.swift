@@ -107,7 +107,7 @@ struct DoubanView: View {
             ScrollView {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                     ForEach(subjects) { subject in
-                        NavigationLink(value: Route.douban(subject)) {
+                        NavigationLink(value: Route.douban(subject: subject)) {
                             DoubanPosterCard(subject: subject)
                         }
                         .buttonStyle(.plain)
