@@ -78,7 +78,7 @@ struct DoubanView: View {
 
     @ViewBuilder
     private var content: some View {
-        if loading && subjects.isEmpty {
+        if isLoading && subjects.isEmpty {
             VStack(spacing: 10) {
                 ProgressView()
                 Text("正在拉豆瓣榜单…")
@@ -123,32 +123,35 @@ struct DoubanView: View {
     // MARK: - 数据
 
     private func loadIfNeeded(_ target: DoubanBoard) async {
-        if target != board { subjects = cache[target] ?? [] }
-        if let cached = cache[target] {
-            subjects = cached
-            return
-        }
         await load(target)
     }
 
+    private func switchBoard(to target: DoubanBoard) {
+        if board != target { board = target }
+        subjects = cache[target] ?? []
+        errorText = nil
+        Task { await load(target) }
+    }
+
+    private var isLoading: Bool { loadingBoards.contains(board) }
+
     private func load(_ target: DoubanBoard, force: Bool = false) async {
-        if loading { return }
         if !force, let cached = cache[target] {
-            subjects = cached
+            if board == target { subjects = cached }
             return
         }
-        loading = true
-        errorText = nil
-        defer { loading = false }
+        if loadingBoards.contains(target) { return }
+
+        loadingBoards.insert(target)
+        if board == target { errorText = nil }
+        defer { loadingBoards.remove(target) }
 
         do {
             let list = try await DoubanService.board(target)
             cache[target] = list
-            if target == board {
-                subjects = list
-            }
+            if board == target { subjects = list }
         } catch {
-            if target == board {
+            if board == target {
                 subjects = []
                 errorText = error.localizedDescription
             }
