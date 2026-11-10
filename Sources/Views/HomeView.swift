@@ -79,10 +79,10 @@ struct AddSubscriptionView: View {
         NavigationStack {
             Form {
                 Section("接口地址") {
-                    TextField("https://example.com/api.json", text: $text, axis: .vertical)
+                    TextField("https://example.com/api.json\n（可以一次粘贴多行，每行一个地址）", text: $text, axis: .vertical)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .lineLimit(1...4)
+                        .lineLimit(3...8)
                         .keyboardType(.URL)
                 }
 
@@ -100,7 +100,7 @@ struct AddSubscriptionView: View {
                 }
 
                 Section {
-                    Text("支持单仓与多仓链接，也可以直接粘贴 JSON 文本。\n识别 type = 1 的苹果CMS JSON 站点，以及 type = 4 的 drpy/T4 服务端站点（免嗅探播放）。jar 插件站点会被跳过。")
+                    Text("支持单仓与多仓链接，也可以直接粘贴 JSON 文本。\n多行粘贴时每行一个地址，会一次性全部导入。\n识别 type = 1 的苹果CMS JSON 站点，以及 type = 4 的 drpy/T4 服务端站点（免嗅探播放）。jar 插件站点会被跳过。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

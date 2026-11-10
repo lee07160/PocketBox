@@ -41,9 +41,60 @@ final class AppState: ObservableObject {
     func addSubscription(urlString: String) async {
         let raw = urlString.trimmed()
         guard !raw.isEmpty else { return }
+
+        // 支持一次粘贴多行/空格/逗号分隔的多个接口地址
+        if !raw.hasPrefix("{") {
+            let tokens = raw
+                .split(whereSeparator: { $0.isNewline || $0 == "," || $0 == "，" || $0 == " " || $0 == "\t" })
+                .map { String($0).trimmed() }
+                .filter { !$0.isEmpty }
+            if tokens.count > 1, tokens.allSatisfy({ $0.isHTTPURL }) {
+                isLoading = true
+                var totalSites = 0, totalSupported = 0, totalLives = 0, failed = 0
+                for token in tokens {
+                    if let result = await importOne(raw: token) {
+                        totalSites += result.sites
+                        totalSupported += result.supported
+                        totalLives += result.lives
+                    } else {
+                        failed += 1
+                    }
+                }
+                isLoading = false
+                var parts = ["已导入 \(tokens.count - failed)/\(tokens.count) 个接口"]
+                if totalSites > 0 { parts.append("\(totalSites) 个站点（\(totalSupported) 个可直接播放）") }
+                if totalLives > 0 { parts.append("\(totalLives) 个直播源") }
+                toast = parts.joined(separator: "，")
+                return
+            }
+        }
+
         isLoading = true
         defer { isLoading = false }
 
+        guard let result = await importOne(raw: raw) else { return }
+
+        if result.isWarehouse {
+            return
+        }
+        if result.sites == 0 {
+            toast = "已导入 \(result.lives) 个直播源"
+        } else if result.supported == 0 {
+            toast = "接口里 \(result.sites) 个站点全是 jar 插件源（type 3），当前版本不支持，需要服务端方案，详见 README"
+        } else {
+            toast = "已导入 \(result.sites) 个站点，其中 \(result.supported) 个可直接播放"
+        }
+    }
+
+    private struct ImportResult {
+        var sites: Int
+        var supported: Int
+        var lives: Int
+        var isWarehouse: Bool = false
+    }
+
+    /// 导入单个接口；失败时已写好 toast，返回 nil
+    private func importOne(raw: String) async -> ImportResult? {
         do {
             let config: LoadedConfig
             if raw.hasPrefix("{") {
@@ -55,12 +106,12 @@ final class AppState: ObservableObject {
             // 多仓：先让用户选具体线路
             if !config.warehouses.isEmpty && config.sites.isEmpty {
                 warehouses = config.warehouses
-                return
+                return ImportResult(sites: 0, supported: 0, lives: 0, isWarehouse: true)
             }
 
             guard !config.isEmpty else {
                 toast = "这个接口里没有可用内容"
-                return
+                return nil
             }
 
             merge(config)
@@ -72,17 +123,14 @@ final class AppState: ObservableObject {
                 }
             }
             save()
-            let supported = config.sites.filter { $0.isSupported }.count
-            if config.sites.isEmpty {
-                toast = "已导入 \(config.lives.count) 个直播源"
-            } else {
-                toast = "已导入 \(config.sites.count) 个站点，其中 \(supported) 个可直接播放"
-                if supported == 0 {
-                    toast = "接口里 \(config.sites.count) 个站点全是 jar 插件源（type 3），当前版本不支持，需要服务端方案，详见 README"
-                }
-            }
+            return ImportResult(
+                sites: config.sites.count,
+                supported: config.sites.filter { $0.isSupported }.count,
+                lives: config.lives.count
+            )
         } catch {
             toast = "导入失败：\(error.localizedDescription)"
+            return nil
         }
     }
 

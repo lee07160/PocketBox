@@ -27,8 +27,15 @@ enum PlaybackRouter {
 /// 嗅探器：非直链地址（分享页 / 跳转页）里往往藏着真正的 m3u8/mp4，
 /// 拉一次页面把流媒体地址抠出来，能省掉整条网页解析链路。
 enum PlaySniffer {
+    /// 绝对地址：https://xxx/index.m3u8?sign=...
     static let streamPattern = try! NSRegularExpression(
         pattern: #"https?://[^\s"'<>\\]+?\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?"#,
+        options: [.caseInsensitive]
+    )
+
+    /// 相对地址：不少站点写成 const url = "/20230103/xxx/index.m3u8?sign=..."
+    static let relativePattern = try! NSRegularExpression(
+        pattern: #"["'](/[^"'\s<>\\]+?\.(?:m3u8|mp4)(?:\?[^"'\s<>\\]*)?)["']"#,
         options: [.caseInsensitive]
     )
 
@@ -48,19 +55,34 @@ enum PlaySniffer {
             }
             // 有些采集站页面是 GBK 编码
             let gb = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
-            guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: gb) else {
+            guard let raw = String(data: data, encoding: .utf8) ?? String(data: data, encoding: gb) else {
                 return nil
             }
-            let range = NSRange(text.startIndex..., in: text)
-            if let match = streamPattern.firstMatch(in: text, options: [], range: range),
-               match.range.location != NSNotFound,
-               let swiftRange = Range(match.range, in: text) {
-                return String(text[swiftRange])
+            // JSON 里常见的转义斜杠先还原
+            let text = raw.replacingOccurrences(of: "\\/", with: "/")
+
+            if let absolute = firstMatch(streamPattern, in: text) {
+                return absolute
+            }
+            if let relative = firstMatch(relativePattern, in: text, group: 1),
+               let base = response.url,
+               let resolved = URL(string: relative, relativeTo: base) {
+                return resolved.absoluteString
             }
             return nil
         } catch {
             return nil
         }
+    }
+
+    private static func firstMatch(_ regex: NSRegularExpression, in text: String, group: Int = 0) -> String? {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: range),
+              match.numberOfRanges > group,
+              let swiftRange = Range(match.range(at: group), in: text) else {
+            return nil
+        }
+        return String(text[swiftRange])
     }
 }
 
@@ -117,7 +139,7 @@ struct SniffingPlayer: View {
     @State private var phase: Phase = .sniffing
     @State private var sniffedURL: URL?
 
-    enum Phase { case sniffing, playing, webview, failed }
+    enum Phase { case sniffing, playing, webview, page, failed }
 
     var body: some View {
         switch phase {
@@ -140,6 +162,13 @@ struct SniffingPlayer: View {
             if let parse = parses.first,
                let webURL = PlaybackRouter.parseURL(parse: parse, video: urlString) {
                 WebPlayerView(url: webURL)
+            } else {
+                failureView
+            }
+        case .page:
+            // 兜底：把原页面直接丢进 WebView，很多站点的播放页自带播放器
+            if let pageURL = URL(string: IDN.normalize(urlString) ?? urlString) {
+                WebPlayerView(url: pageURL)
             } else {
                 failureView
             }
@@ -170,8 +199,8 @@ struct SniffingPlayer: View {
             phase = .playing
             return
         }
-        // 2) 兜底：接口自带解析器则走网页解析
-        phase = parses.isEmpty ? .failed : .webview
+        // 2) 兜底：接口自带解析器则走网页解析，没有就直开原页面
+        phase = parses.isEmpty ? .page : .webview
     }
 }
 
