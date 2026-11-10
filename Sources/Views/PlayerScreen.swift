@@ -7,13 +7,60 @@ enum PlaybackRouter {
     /// 能否直接用 AVPlayer 播（HLS / MP4）
     static func isDirect(_ urlString: String) -> Bool {
         let lower = urlString.lowercased()
-        return lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".mov")
+        if lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".mov") {
+            return true
+        }
+        // 有的接口把扩展名藏在 query 里（...?url=xxx.m3u8&t=1）
+        if let query = URL(string: urlString)?.query?.lowercased() {
+            return query.contains(".m3u8") || query.contains(".mp4")
+        }
+        return false
     }
 
     static func parseURL(parse: Parse, video: String) -> URL? {
         let base = parse.url.trimmed()
         let encoded = video.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? video
         return URL(string: base + encoded)
+    }
+}
+
+/// 嗅探器：非直链地址（分享页 / 跳转页）里往往藏着真正的 m3u8/mp4，
+/// 拉一次页面把流媒体地址抠出来，能省掉整条网页解析链路。
+enum PlaySniffer {
+    static let streamPattern = try! NSRegularExpression(
+        pattern: #"https?://[^\s"'<>\\]+?\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?"#,
+        options: [.caseInsensitive]
+    )
+
+    /// 返回嗅探到的直链；失败返回 nil
+    static func sniff(_ urlString: String) async -> String? {
+        let normalized = IDN.normalize(urlString) ?? urlString
+        guard let url = URL(string: normalized) else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1",
+                         forHTTPHeaderField: "User-Agent")
+        do {
+            let (data, response) = try await Net.session.data(for: request)
+            // 有些短链直接 302 到 m3u8，最终 URL 就是结果
+            if let final = response.url?.absoluteString, PlaybackRouter.isDirect(final) {
+                return final
+            }
+            // 有些采集站页面是 GBK 编码
+            let gb = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+            guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: gb) else {
+                return nil
+            }
+            let range = NSRange(text.startIndex..., in: text)
+            if let match = streamPattern.firstMatch(in: text, options: [], range: range),
+               match.range.location != NSNotFound,
+               let swiftRange = Range(match.range, in: text) {
+                return String(text[swiftRange])
+            }
+            return nil
+        } catch {
+            return nil
+        }
     }
 }
 
@@ -55,23 +102,76 @@ struct PlayerScreen: View {
         if PlaybackRouter.isDirect(target.url), let url = URL(string: target.url) {
             VideoPlayerView(url: url)
                 .ignoresSafeArea()
-        } else if let parse = state.parses.first, let url = PlaybackRouter.parseURL(parse: parse, video: target.url) {
-            WebPlayerView(url: url)
-                .ignoresSafeArea()
         } else {
-            VStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.orange)
-                Text("这个地址需要网页解析")
-                    .font(.headline)
-                Text("接口里没有可用的解析器，或者这条线路不是直链。\n可以换个线路试试。")
+            SniffingPlayer(urlString: target.url, parses: state.parses)
+                .ignoresSafeArea()
+        }
+    }
+}
+
+/// 非直链地址的解析链路：嗅探 → 网页解析器 → 报错提示
+struct SniffingPlayer: View {
+    let urlString: String
+    let parses: [Parse]
+
+    @State private var phase: Phase = .sniffing
+    @State private var sniffedURL: URL?
+
+    enum Phase { case sniffing, playing, webview, failed }
+
+    var body: some View {
+        switch phase {
+        case .sniffing:
+            VStack(spacing: 14) {
+                ProgressView()
+                    .scaleEffect(1.4)
+                    .tint(.white)
+                Text("正在获取播放地址…")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task { await resolve() }
+        case .playing:
+            if let url = sniffedURL {
+                VideoPlayerView(url: url)
+            }
+        case .webview:
+            if let parse = parses.first,
+               let webURL = PlaybackRouter.parseURL(parse: parse, video: urlString) {
+                WebPlayerView(url: webURL)
+            } else {
+                failureView
+            }
+        case .failed:
+            failureView
         }
+    }
+
+    private var failureView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 30))
+                .foregroundStyle(.orange)
+            Text("这个地址需要网页解析")
+                .font(.headline)
+            Text("已尝试嗅探和全部解析器都无法取出直链。\n可以换个线路或换一集试试。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func resolve() async {
+        // 1) 嗅探：页面/重定向里找真实直链
+        if let found = await PlaySniffer.sniff(urlString), let url = URL(string: found) {
+            sniffedURL = url
+            phase = .playing
+            return
+        }
+        // 2) 兜底：接口自带解析器则走网页解析
+        phase = parses.isEmpty ? .failed : .webview
     }
 }
 
