@@ -1,3 +1,4 @@
+import AVFAudio
 import AVKit
 import SwiftUI
 import WebKit
@@ -37,6 +38,16 @@ struct PlayerScreen: View {
                     .padding(14)
             }
         }
+        .onAppear { Self.activateAudioSession() }
+    }
+
+    /// 声明为正式媒体播放会话：
+    /// 默认会话遵循 iPhone 侧边静音开关（静音键一拨，画面在放、声音没了）
+    /// 设为 .playback 后无论静音键状态如何都出声，走扬声器/耳机/蓝牙
+    static func activateAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback, options: [])
+        try? session.setActive(true)
     }
 
     @ViewBuilder
