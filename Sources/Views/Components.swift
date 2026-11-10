@@ -6,35 +6,13 @@ struct PosterImage: View {
     var height: CGFloat = 152
 
     var body: some View {
-        Group {
-            if let url = URL(string: urlString), urlString.isHTTPURL {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.2))) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        placeholder
-                    }
-                }
-            } else {
-                placeholder
-            }
-        }
-        .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
-    }
-
-    private var placeholder: some View {
-        ZStack {
-            Color.white.opacity(0.06)
-            Image(systemName: "film")
-                .font(.system(size: 24))
-                .foregroundStyle(.white.opacity(0.25))
-        }
+        RemoteImage(urlString: urlString)
+            .frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            )
     }
 }
 

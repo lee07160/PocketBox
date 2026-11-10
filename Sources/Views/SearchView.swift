@@ -130,23 +130,7 @@ struct SearchView: View {
         searching = true
         searched = true
         hits = []
-
-        let sites = state.searchableSites
-        await withTaskGroup(of: [SearchHit].self) { group in
-            for site in sites {
-                group.addTask {
-                    guard let items = try? await VodService.search(site: site, keyword: query) else { return [] }
-                    return items.map { SearchHit(siteKey: site.key, item: $0) }
-                }
-            }
-            for await batch in group {
-                hits.append(contentsOf: batch)
-            }
-        }
-
-        // 去重，同一个站点里同一条目只留一次
-        var seen = Set<String>()
-        hits = hits.filter { seen.insert($0.id).inserted }
+        hits = await Aggregator.search(sites: state.searchableSites, keyword: query)
         searching = false
     }
 }

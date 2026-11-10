@@ -21,6 +21,9 @@ enum Net {
     /// 遇到这类接口时把这里改成 okhttp 即可。
     static var userAgent = "okhttp/3.12.0"
 
+    /// 豆瓣这类站点只认浏览器 UA
+    static let browserUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1"
+
     static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 15
@@ -29,9 +32,12 @@ enum Net {
         return URLSession(configuration: configuration)
     }()
 
-    static func data(from url: URL) async throws -> Data {
+    static func data(from url: URL, headers: [String: String] = [:]) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200...399).contains(http.statusCode) {
             throw NetError.http(http.statusCode)

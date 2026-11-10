@@ -5,6 +5,7 @@ enum Route: Hashable {
     case category(siteKey: String, categoryId: String, title: String)
     case detail(siteKey: String, item: VodItem)
     case aggregate(hits: [SearchHit])
+    case douban(subject: DoubanSubject)
 }
 
 struct RootView: View {
@@ -14,6 +15,9 @@ struct RootView: View {
         TabView {
             HomeView()
                 .tabItem { Label("站点", systemImage: "square.grid.2x2") }
+
+            DoubanView()
+                .tabItem { Label("推荐", systemImage: "flame") }
 
             LiveView()
                 .tabItem { Label("直播", systemImage: "tv") }
@@ -41,6 +45,8 @@ extension View {
                 DetailView(siteKey: siteKey, item: item)
             case .aggregate(let hits):
                 AggregatedDetailView(hits: hits)
+            case .douban(let subject):
+                DoubanDetailView(subject: subject)
             }
         }
     }
