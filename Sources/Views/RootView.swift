@@ -25,8 +25,8 @@ struct RootView: View {
             SearchView()
                 .tabItem { Label("搜索", systemImage: "magnifyingglass") }
 
-            SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape") }
+            LibraryView()
+                .tabItem { Label("我的", systemImage: "person.crop.circle") }
         }
         .tint(.orange)
     }

@@ -191,12 +191,16 @@ final class PlayerModel: ObservableObject {
         }
     }
 
-    func load(_ url: URL) {
+    func load(_ url: URL, startAt: Double = 0) {
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
         finished = false
         player.play()
         isPlaying = true
+        if startAt > 1 {
+            player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero)
+        }
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
         }
@@ -245,6 +249,11 @@ final class PlayerModel: ObservableObject {
 
 struct NativePlayerView: View {
     let url: URL
+    var startAt: Double = 0
+    /// 播放进度回调（每约 15 秒 + 退出时各一次），用于写播放历史
+    var onProgress: ((Double, Double) -> Void)? = nil
+    /// 播放地址确定后回调（嗅探出的直链），可用于更新历史里的可复用地址
+    var onResolved: ((String) -> Void)? = nil
 
     @StateObject private var model = PlayerModel()
 
@@ -288,10 +297,15 @@ struct NativePlayerView: View {
         .onAppear {
             PlayerScreen.activateAudioSession()
             originalBrightness = UIScreen.main.brightness
-            model.load(url)
+            model.load(url, startAt: startAt)
+            onResolved?(url.absoluteString)
             scheduleHide()
         }
+        .onChange(of: progressBucket) { _ in
+            onProgress?(model.position, model.duration)
+        }
         .onDisappear {
+            onProgress?(model.position, model.duration)
             model.stop()
             hudTask?.cancel()
             hideTask?.cancel()
@@ -301,6 +315,11 @@ struct NativePlayerView: View {
                 Orientation.apply(landscape: false)
             }
         }
+    }
+
+    /// 每 15 秒一个刻度，避免每 0.4 秒都写一次历史
+    private var progressBucket: Int {
+        Int(max(model.position, 0) / 15)
     }
 
     // MARK: 手势层

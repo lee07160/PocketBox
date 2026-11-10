@@ -122,12 +122,35 @@ struct PlayerScreen: View {
     @ViewBuilder
     private var content: some View {
         if PlaybackRouter.isDirect(target.url), let url = URL(string: target.url) {
-            NativePlayerView(url: url)
+            NativePlayerView(url: url, startAt: target.startAt, onProgress: recordProgress)
                 .ignoresSafeArea()
         } else {
-            SniffingPlayer(urlString: target.url, parses: state.parses)
-                .ignoresSafeArea()
+            SniffingPlayer(
+                urlString: target.url,
+                parses: state.parses,
+                startAt: target.startAt,
+                onProgress: recordProgress
+            )
+            .ignoresSafeArea()
         }
+    }
+
+    /// 写播放历史：播放器每 15 秒回调一次，退出时再补一次
+    private func recordProgress(_ position: Double, _ duration: Double) {
+        guard target.hasHistoryContext else { return }
+        let record = HistoryRecord(
+            siteKey: target.siteKey,
+            siteName: target.siteName,
+            vodId: target.vodId,
+            vodName: target.vodName,
+            pic: target.pic,
+            episodeName: target.title,
+            url: target.url,
+            position: position,
+            duration: duration,
+            updatedAt: Date()
+        )
+        state.recordHistory(record)
     }
 }
 
@@ -135,6 +158,8 @@ struct PlayerScreen: View {
 struct SniffingPlayer: View {
     let urlString: String
     let parses: [Parse]
+    var startAt: Double = 0
+    var onProgress: ((Double, Double) -> Void)? = nil
 
     @State private var phase: Phase = .sniffing
     @State private var sniffedURL: URL?
@@ -156,7 +181,7 @@ struct SniffingPlayer: View {
             .task { await resolve() }
         case .playing:
             if let url = sniffedURL {
-                NativePlayerView(url: url)
+                NativePlayerView(url: url, startAt: startAt, onProgress: onProgress)
             }
         case .webview:
             if let parse = parses.first,

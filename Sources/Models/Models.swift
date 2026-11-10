@@ -149,12 +149,66 @@ struct FavoriteRecord: Codable, Identifiable, Hashable {
     var id: String { siteKey + "|" + item.id }
 }
 
+/// 一条播放历史：按「站点 + 影片 + 集」唯一，重复播放会更新进度
+struct HistoryRecord: Codable, Identifiable, Hashable {
+    var siteKey: String
+    var siteName: String
+    var vodId: String
+    var vodName: String
+    var pic: String
+    var episodeName: String
+    /// 实际点播的地址（续播时还会走一遍嗅探/解析链路）
+    var url: String
+    var position: Double
+    var duration: Double
+    var updatedAt: Date
+
+    var id: String { siteKey + "|" + vodId + "|" + episodeName }
+
+    var progress: Double {
+        guard duration > 0 else { return 0 }
+        return min(max(position / duration, 0), 1)
+    }
+
+    var isFinished: Bool {
+        duration > 0 && position / duration > 0.95
+    }
+
+    var timeText: String {
+        let total = Int(max(position, 0).rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%02d:%02d", m, s)
+    }
+
+    var updatedText: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: updatedAt, relativeTo: Date())
+    }
+}
+
 // MARK: - 播放目标
 
 struct PlayTarget: Identifiable, Hashable {
     var id = UUID()
     var url: String
     var title: String
+    /// 以下用于写播放历史 / 续播，缺省也不影响直接播放
+    var siteKey: String = ""
+    var siteName: String = ""
+    var vodId: String = ""
+    var vodName: String = ""
+    var pic: String = ""
+    /// 从历史续播时的起播秒数
+    var startAt: Double = 0
+
+    var hasHistoryContext: Bool {
+        !siteKey.isEmpty && !vodId.isEmpty && !vodName.isEmpty
+    }
 }
 
 // MARK: - 错误展示

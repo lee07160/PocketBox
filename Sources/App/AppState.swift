@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     @Published private(set) var lives: [LiveSource] = []
     @Published private(set) var warehouses: [Warehouse] = []
     @Published private(set) var favorites: [FavoriteRecord] = []
+    @Published private(set) var history: [HistoryRecord] = []
     @Published var isLoading = false
     @Published var toast: String?
 
@@ -162,6 +163,7 @@ final class AppState: ObservableObject {
         parses = []
         lives = []
         favorites = []
+        history = []
         warehouses = []
         save()
     }
@@ -179,6 +181,38 @@ final class AppState: ObservableObject {
 
     func isFavorite(siteKey: String, itemId: String) -> Bool {
         favorites.contains { $0.siteKey == siteKey && $0.item.id == itemId }
+    }
+
+    var favoriteItems: [FavoriteRecord] { favorites }
+
+    // MARK: - 播放历史
+
+    /// 记录/更新一条播放历史（同一集只保留一条，进度取最新）
+    func recordHistory(_ record: HistoryRecord) {
+        var entry = record
+        entry.updatedAt = Date()
+        history.removeAll { $0.id == entry.id }
+        history.insert(entry, at: 0)
+        if history.count > 120 {
+            history = Array(history.prefix(120))
+        }
+        save()
+    }
+
+    func removeHistory(_ record: HistoryRecord) {
+        history.removeAll { $0.id == record.id }
+        save()
+    }
+
+    func clearHistory() {
+        guard !history.isEmpty else { return }
+        history = []
+        save()
+    }
+
+    /// 同一部片最近看过哪一集
+    func lastEpisode(siteKey: String, vodId: String) -> HistoryRecord? {
+        history.first { $0.siteKey == siteKey && $0.vodId == vodId }
     }
 
     // MARK: - 合并与持久化
@@ -201,6 +235,8 @@ final class AppState: ObservableObject {
         var parses: [Parse] = []
         var lives: [LiveSource] = []
         var favorites: [FavoriteRecord] = []
+        /// 老版本的存档没有这个字段，用 Optional 保证能解出来
+        var history: [HistoryRecord]?
     }
 
     private func save() {
@@ -209,7 +245,8 @@ final class AppState: ObservableObject {
             sites: sites,
             parses: parses,
             lives: lives,
-            favorites: favorites
+            favorites: favorites,
+            history: history
         )
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: storeURL, options: .atomic)
@@ -223,5 +260,6 @@ final class AppState: ObservableObject {
         parses = snapshot.parses
         lives = snapshot.lives
         favorites = snapshot.favorites
+        history = snapshot.history ?? []
     }
 }

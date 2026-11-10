@@ -19,6 +19,7 @@ struct DetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                resumeRow
                 if !current.content.isEmpty {
                     Text(current.content)
                         .font(.system(size: 13))
@@ -63,6 +64,45 @@ struct DetailView: View {
         }
         .alert(item: $errorBox) { box in
             Alert(title: Text("播放失败"), message: Text(box.message), dismissButton: .default(Text("好")))
+        }
+    }
+
+    @ViewBuilder
+    private var resumeRow: some View {
+        let record = state.lastEpisode(siteKey: siteKey, vodId: current.id)
+        let episode = record.flatMap { item in
+            current.groups.flatMap { $0.episodes }.first { $0.name == item.episodeName }
+        }
+        if let record, let episode {
+            Button {
+                play(episode, startAt: record.isFinished ? 0 : record.position)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 26, height: 26)
+                        .background(Color.orange, in: Circle())
+                        .foregroundStyle(.black)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("继续观看 \(record.episodeName)")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                        Text("上次看到 \(record.timeText)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -169,7 +209,7 @@ struct DetailView: View {
         }
     }
 
-    private func play(_ episode: Episode) {
+    private func play(_ episode: Episode, startAt: Double = 0) {
         guard let site else { return }
         if site.needsPlayResolve {
             // T4/drpy 服务端源：先换直链再播
@@ -178,13 +218,27 @@ struct DetailView: View {
                 defer { resolving = nil }
                 do {
                     let resolved = try await Type4Service.resolve(site: site, episodeURL: episode.url)
-                    playTarget = PlayTarget(url: resolved.url.absoluteString, title: episode.name)
+                    playTarget = makeTarget(url: resolved.url.absoluteString, episode: episode, site: site, startAt: startAt)
                 } catch {
                     errorBox = ErrorBox(message: error.localizedDescription)
                 }
             }
         } else {
-            playTarget = PlayTarget(url: episode.url, title: episode.name)
+            playTarget = makeTarget(url: episode.url, episode: episode, site: site, startAt: startAt)
         }
+    }
+
+    /// 带上站点/影片信息，播放时才能写进历史记录
+    private func makeTarget(url: String, episode: Episode, site: Site, startAt: Double) -> PlayTarget {
+        PlayTarget(
+            url: url,
+            title: episode.name,
+            siteKey: siteKey,
+            siteName: site.name,
+            vodId: current.id,
+            vodName: current.name,
+            pic: current.pic,
+            startAt: startAt
+        )
     }
 }
