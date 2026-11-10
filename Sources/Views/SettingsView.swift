@@ -60,6 +60,35 @@ struct SettingsView: View {
             }
 
             Section {
+                ForEach(AppState.platformCatalogSites) { site in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(site.name).font(.system(size: 13))
+                            Text(site.api)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if state.site(withKey: site.key) != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+                Button {
+                    let added = state.addPlatformCatalog()
+                    state.toast = added > 0 ? "已添加 \(added) 个平台目录源" : "这两个源已经在列表里了"
+                } label: {
+                    Label("添加平台目录源", systemImage: "square.stack.3d.up")
+                }
+            } header: {
+                Text("iBox 平台目录（找片用）")
+            } footer: {
+                Text("iBox 内置的那两条采集接口，片库约 40 万条、更新到当天。用途是找片和看简介：它们的播放地址多是腾讯/爱奇艺/优酷的网页线路，需要解析服务才能出直链，通常只有免费内容放得出来。加进来后会自动排在直链源后面。")
+            }
+
+            Section {
                 Button("刷新全部订阅") {
                     Task { await state.refreshAll() }
                 }

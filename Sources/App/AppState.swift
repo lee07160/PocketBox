@@ -140,6 +140,49 @@ final class AppState: ObservableObject {
         await addSubscription(urlString: warehouse.url)
     }
 
+    // MARK: - 平台目录源（iBox 同款）
+
+    /// 两条苹果 CMS 标准接口，来自 iBox 内置的那套「平台聚合采集」。
+    /// 特点：片库极大（合计约 40 万条、更新到当天），但播放地址基本都是
+    /// 腾讯/爱奇艺/优酷/芒果/B 站的**网页地址**，要解析服务才能出直链。
+    /// 所以定位成「找片目录」：能搜、能看简介，点播建议切到直链源。
+    static let platformCatalogSites: [Site] = [
+        Site(
+            key: "ibox-catalog-a",
+            name: "iBox目录A · 影视",
+            type: 1,
+            api: "http://38.76.166.26:7788/api.php/provide/vod/",
+            searchable: true,
+            quickSearch: true,
+            ext: "",
+            playerType: ""
+        ),
+        Site(
+            key: "ibox-catalog-b",
+            name: "iBox目录B · 剧集",
+            type: 1,
+            api: "http://149.104.6.155:12121/api.php/provide/vod/",
+            searchable: true,
+            quickSearch: true,
+            ext: "",
+            playerType: ""
+        )
+    ]
+
+    /// 添加平台目录源，返回实际新增条数（0 表示已经有了）
+    @discardableResult
+    func addPlatformCatalog() -> Int {
+        var added = 0
+        for site in Self.platformCatalogSites {
+            let exists = sites.contains { $0.key == site.key || $0.api == site.api }
+            guard !exists else { continue }
+            sites.append(site)
+            added += 1
+        }
+        if added > 0 { save() }
+        return added
+    }
+
     func refreshAll() async {
         guard !subscriptions.isEmpty else { return }
         isLoading = true

@@ -196,15 +196,16 @@ struct AggregatedDetailView: View {
         let count = (loaded ?? hit.item).bestEpisodeCount
         let tag: String = {
             let item = loaded ?? hit.item
-            let remarks = item.remarks
-            let base: String
-            if !remarks.isEmpty {
-                base = remarks
+            var base: String
+            if !item.remarks.isEmpty {
+                base = item.remarks
             } else {
                 base = count > 0 ? "\(count)集" : "未知"
             }
             // 同名不同年份（翻拍）时把年份带上，避免选错版本
-            if hasYearConflict, !item.year.isEmpty { return item.year + " · " + base }
+            if hasYearConflict, !item.year.isEmpty { base = item.year + " · " + base }
+            // 平台线路（腾讯/爱奇艺…）需要网页解析，先说清楚
+            if item.isPlatformOnly { base = "平台 · " + base }
             return base
         }()
 
@@ -292,6 +293,18 @@ struct AggregatedDetailView: View {
                 Text("共 \(group.episodes.count) 集 · \(state.site(withKey: hit.siteKey)?.name ?? "")")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+
+                if item.isPlatformOnly {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text("这是平台网页线路（腾讯/爱奇艺/优酷这类），点集会交给网页播放器，会员内容通常放不出来。建议换上面的直链源。")
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange.opacity(0.9))
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 78), spacing: 8)], alignment: .leading, spacing: 8) {
                     ForEach(group.episodes) { episode in

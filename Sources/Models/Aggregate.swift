@@ -123,8 +123,12 @@ enum TitleGrouper {
 
         let groups: [TitleGroup] = order.compactMap { key in
             guard var list = buckets[key], !list.isEmpty else { return nil }
-            // 集数多的源排前面，用户点进去默认就能播到最全的那个
+            // 能直接播的源排前面（平台线路要点解析，排后面不占默认位），
+            // 其次集数多的排前面，用户点进去默认就能播到最全的那个
             list.sort { lhs, rhs in
+                if lhs.item.isPlatformOnly != rhs.item.isPlatformOnly {
+                    return !lhs.item.isPlatformOnly
+                }
                 if lhs.item.bestEpisodeCount != rhs.item.bestEpisodeCount {
                     return lhs.item.bestEpisodeCount > rhs.item.bestEpisodeCount
                 }

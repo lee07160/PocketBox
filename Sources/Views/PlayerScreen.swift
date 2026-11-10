@@ -124,6 +124,10 @@ struct PlayerScreen: View {
         if PlaybackRouter.isDirect(target.url), let url = URL(string: target.url) {
             NativePlayerView(url: url, startAt: target.startAt, onProgress: recordProgress)
                 .ignoresSafeArea()
+        } else if let platform = PlatformLink.platform(of: target.url) {
+            // 腾讯/爱奇艺/优酷… 的网页地址，页面里本来就没有 m3u8，嗅探纯浪费 3~5 秒
+            PlatformWebPlayer(platform: platform, urlString: target.url)
+                .ignoresSafeArea()
         } else {
             SniffingPlayer(
                 urlString: target.url,
@@ -226,6 +230,39 @@ struct SniffingPlayer: View {
         }
         // 2) 兜底：接口自带解析器则走网页解析，没有就直开原页面
         phase = parses.isEmpty ? .page : .webview
+    }
+}
+
+/// 平台网页线路（腾讯/爱奇艺/优酷/B 站…）
+/// 这类地址不是 m3u8，嗅探抠不出来，直接交给平台自己的网页播放器；
+/// 能不能放取决于平台（免费片一般行，会员片不行），所以底下挂一条说明。
+struct PlatformWebPlayer: View {
+    let platform: String
+    let urlString: String
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+
+            if let url = URL(string: IDN.normalize(urlString) ?? urlString) {
+                WebPlayerView(url: url)
+            } else {
+                Text("地址无效")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                Text("\(platform) 网页线路 · 免费内容可播，会员内容需平台账号")
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.white.opacity(0.85))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.black.opacity(0.6), in: Capsule())
+            .padding(.bottom, 44)
+        }
     }
 }
 
