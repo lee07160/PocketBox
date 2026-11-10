@@ -4,6 +4,7 @@ enum Route: Hashable {
     case site(key: String)
     case category(siteKey: String, categoryId: String, title: String)
     case detail(siteKey: String, item: VodItem)
+    case aggregate(hits: [SearchHit])
 }
 
 struct RootView: View {
@@ -38,6 +39,8 @@ extension View {
                 CategoryGridView(siteKey: siteKey, categoryId: categoryId, title: title)
             case .detail(let siteKey, let item):
                 DetailView(siteKey: siteKey, item: item)
+            case .aggregate(let hits):
+                AggregatedDetailView(hits: hits)
             }
         }
     }
