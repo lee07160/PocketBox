@@ -100,7 +100,7 @@ struct PlayerScreen: View {
     @ViewBuilder
     private var content: some View {
         if PlaybackRouter.isDirect(target.url), let url = URL(string: target.url) {
-            VideoPlayerView(url: url)
+            NativePlayerView(url: url)
                 .ignoresSafeArea()
         } else {
             SniffingPlayer(urlString: target.url, parses: state.parses)
@@ -134,7 +134,7 @@ struct SniffingPlayer: View {
             .task { await resolve() }
         case .playing:
             if let url = sniffedURL {
-                VideoPlayerView(url: url)
+                NativePlayerView(url: url)
             }
         case .webview:
             if let parse = parses.first,
@@ -173,22 +173,6 @@ struct SniffingPlayer: View {
         // 2) 兜底：接口自带解析器则走网页解析
         phase = parses.isEmpty ? .failed : .webview
     }
-}
-
-struct VideoPlayerView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        let player = AVPlayer(url: url)
-        controller.player = player
-        controller.allowsPictureInPicturePlayback = true
-        controller.updatesNowPlayingInfoCenter = true
-        player.play()
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {}
 }
 
 struct WebPlayerView: UIViewRepresentable {
