@@ -20,7 +20,8 @@ enum Type4Service {
         // 1) JSON：{"parse":0,"playUrl":"","jx":0,"url":"https://...m3u8"}
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             for key in ["url", "playUrl", "play_url", "jx"] {
-                if let link = JSONValue.string(obj[key]).trimmed(), link.isHTTPURL, let target = URL(string: link) {
+                let link = JSONValue.string(obj[key]).trimmed()
+                if link.isHTTPURL, let target = URL(string: link) {
                     return ResolvedPlay(url: target)
                 }
             }
