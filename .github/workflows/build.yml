@@ -1,0 +1,65 @@
+name: build-ipa
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project PocketBox.xcodeproj \
+            -scheme PocketBox \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Package IPA
+        run: |
+          set -e
+          APP_PATH="build/Build/Products/Release-iphoneos/PocketBox.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "找不到产物目录：$APP_PATH"
+            ls -R build/Build/Products || true
+            exit 1
+          fi
+          rm -rf Payload PocketBox.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          # ad-hoc 签名，TrollStore 安装时会用 CoreTrust 重新签名
+          codesign --force --deep --sign - Payload/PocketBox.app || true
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload PocketBox.ipa
+          ls -lh PocketBox.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketBox-ipa
+          path: PocketBox.ipa
+          retention-days: 30
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PocketBox.ipa
