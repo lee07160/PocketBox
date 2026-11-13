@@ -312,7 +312,8 @@ struct SniffingPlayer: View {
     enum Phase: Equatable { case sniffing, playing, webview, page, failed }
 
     var body: some View {
-        switch phase {
+        Group {
+            switch phase {
         case .sniffing:
             VStack(spacing: 14) {
                 ProgressView()
@@ -354,6 +355,7 @@ struct SniffingPlayer: View {
             }
         case .failed:
             failureView
+            }
         }
         .onChange(of: phase) { newPhase in
             onNativeChange?(newPhase == .playing)
