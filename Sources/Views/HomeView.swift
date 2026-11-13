@@ -44,7 +44,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("口袋盒")
+            .navigationTitle("影视大全")
             .pocketDestinations()
             .refreshable { await state.refreshAll() }
             .toolbar {
