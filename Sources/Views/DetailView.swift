@@ -233,6 +233,7 @@ struct DetailView: View {
         // 找到这一集所属的线路，把整季传给播放器（选集/上下集/自动连播用）
         let group = current.groups.first { g in g.episodes.contains { $0.id == episode.id } }
         let index = group?.episodes.firstIndex { $0.id == episode.id } ?? 0
+        let season: [PlayEpisode] = group.map { $0.episodes.map { PlayEpisode(name: $0.name, url: $0.url) } } ?? []
         return PlayTarget(
             url: url,
             title: episode.name,
@@ -242,7 +243,7 @@ struct DetailView: View {
             vodName: current.name,
             pic: current.pic,
             startAt: startAt,
-            episodes: (group?.episodes ?? []).map { PlayEpisode(name: $0.name, url: $0.url) },
+            episodes: season,
             episodeIndex: index
         )
     }

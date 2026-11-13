@@ -377,9 +377,10 @@ struct AggregatedDetailView: View {
 
     /// 带上当前选中的源与整季集列表，播放时才能写历史、在播放器里切集
     private func makeTarget(url: String, episode: Episode, site: Site, startAt: Double) -> PlayTarget {
-        let item = loaded ?? hit.item
+        let item = current
         let group = item.groups.first { g in g.episodes.contains { $0.id == episode.id } }
         let index = group?.episodes.firstIndex { $0.id == episode.id } ?? 0
+        let season: [PlayEpisode] = group.map { $0.episodes.map { PlayEpisode(name: $0.name, url: $0.url) } } ?? []
         return PlayTarget(
             url: url,
             title: episode.name,
@@ -389,7 +390,7 @@ struct AggregatedDetailView: View {
             vodName: current.name,
             pic: current.pic,
             startAt: startAt,
-            episodes: (group?.episodes ?? []).map { PlayEpisode(name: $0.name, url: $0.url) },
+            episodes: season,
             episodeIndex: index
         )
     }
