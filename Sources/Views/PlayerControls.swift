@@ -114,9 +114,15 @@ enum Orientation {
 // MARK: - 手势提示条
 
 struct PlayHUD: Equatable {
-    enum Kind { case brightness, volume }
+    enum Kind: Equatable {
+        case brightness, volume
+        /// 水平滑动快进/快退预览（forward = 向后快进）
+        case seek(forward: Bool)
+    }
     var kind: Kind
     var value: Double
+    /// seek 模式下的目标时间（秒）
+    var seekSeconds: Double = 0
 }
 
 struct PlayHUDView: View {
@@ -125,14 +131,22 @@ struct PlayHUDView: View {
     private var iconName: String {
         switch hud.kind {
         case .brightness:
-            if hud.value < 0.34 { return "sun.min.fill" }
-            if hud.value < 0.7 { return "sun.max.fill" }
             return "sun.max.fill"
         case .volume:
             if hud.value <= 0.001 { return "speaker.slash.fill" }
             if hud.value < 0.5 { return "speaker.wave.1.fill" }
             return "speaker.wave.3.fill"
+        case .seek(let forward):
+            return forward ? "goforward.15" : "gobackward.15"
         }
+    }
+
+    /// seek 模式显示目标时间，其余显示百分比
+    private var valueText: String {
+        if case .seek = hud.kind {
+            return Self.timeText(hud.seekSeconds)
+        }
+        return "\(Int((hud.value * 100).rounded()))%"
     }
 
     var body: some View {
@@ -141,24 +155,41 @@ struct PlayHUDView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 18)
 
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 96, height: 6)
-                Capsule()
-                    .fill(Color.white)
-                    .frame(width: 96 * CGFloat(hud.value), height: 6)
-            }
+            if case .seek = hud.kind {
+                Text(valueText)
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+            } else {
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 96, height: 6)
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: 96 * CGFloat(hud.value), height: 6)
+                }
 
-            Text("\(Int((hud.value * 100).rounded()))%")
-                .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .frame(width: 38, alignment: .leading)
+                Text(valueText)
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .frame(width: 38, alignment: .leading)
+            }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.black.opacity(0.6), in: Capsule())
         .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 0.5))
+    }
+
+    static func timeText(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds >= 0 else { return "00:00" }
+        let total = Int(seconds.rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+        return String(format: "%02d:%02d", m, s)
     }
 }
 
@@ -271,7 +302,8 @@ struct NativePlayerView: View {
 
     @StateObject private var model = PlayerModel()
 
-    @State private var fillScreen = false
+    // 画面缩放恒为「等比完整显示」(aspectFit)：全屏只旋转方向，不改缩放——
+    // 之前全屏切 aspectFill 会把画面放大裁边，看起来"超出屏幕"
     @State private var landscape = false
     @State private var controlsVisible = true
     @State private var hud: PlayHUD?
@@ -281,12 +313,18 @@ struct NativePlayerView: View {
     @State private var scrubbing = false
     @State private var scrubValue: Double = 0
     @State private var originalBrightness: CGFloat = UIScreen.main.brightness
+    // 水平滑动 = 快进/快退：本次拖动是否为 seek 模式、起点位置、当前目标位置
+    @State private var dragIsSeek = false
+    @State private var seekBaseline: Double = 0
+    @State private var seekTarget: Double = 0
+    /// 水平滑满整个屏幕宽度对应的快进/快退秒数
+    private static let seekSpanSeconds: Double = 90
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VideoSurface(player: model.player, fill: fillScreen)
+            VideoSurface(player: model.player, fill: false)
                 .ignoresSafeArea()
 
             gestureLayer
@@ -351,6 +389,13 @@ struct NativePlayerView: View {
                     DragGesture(minimumDistance: 12)
                         .onChanged { value in handleDrag(value, size: geo.size) }
                         .onEnded { _ in
+                            if dragIsSeek {
+                                // 松手才真正跳转，滑动过程中只显示预览时间
+                                if model.duration > 0 {
+                                    model.endScrub(at: seekTarget)
+                                }
+                                dragIsSeek = false
+                            }
                             dragBaseline = nil
                             scheduleHUDHide()
                             if controlsVisible { scheduleHide() }
@@ -367,13 +412,34 @@ struct NativePlayerView: View {
     }
 
     private func handleDrag(_ value: DragGesture.Value, size: CGSize) {
-        let onLeftSide = value.startLocation.x < size.width / 2
-
+        // 第一次移动时判定方向并锁定：水平 = 快进/快退，竖直 = 亮度/音量
         if dragBaseline == nil {
-            dragBaseline = onLeftSide
-                ? Double(UIScreen.main.brightness)
-                : Double(SystemVolume.shared.value)
+            dragIsSeek = abs(value.translation.width) > abs(value.translation.height)
+            if dragIsSeek {
+                seekBaseline = model.position
+                dragBaseline = 0
+            } else {
+                let onLeftSide = value.startLocation.x < size.width / 2
+                dragBaseline = onLeftSide
+                    ? Double(UIScreen.main.brightness)
+                    : Double(SystemVolume.shared.value)
+            }
         }
+
+        if dragIsSeek {
+            guard model.duration > 0 else { return }
+            let ratio = value.translation.width / max(size.width, 1)
+            let target = min(max(seekBaseline + ratio * Self.seekSpanSeconds, 0), model.duration)
+            seekTarget = target
+            hud = PlayHUD(
+                kind: .seek(forward: target >= seekBaseline),
+                value: 0,
+                seekSeconds: target
+            )
+            scheduleHUDHide()
+            return
+        }
+
         guard let baseline = dragBaseline else { return }
 
         // 高度 65% 的滑动量对应 0 → 100%
@@ -381,6 +447,7 @@ struct NativePlayerView: View {
         let delta = -value.translation.height / span
         let target = min(max(baseline + Double(delta), 0), 1)
 
+        let onLeftSide = value.startLocation.x < size.width / 2
         if onLeftSide {
             UIScreen.main.brightness = CGFloat(target)
             hud = PlayHUD(kind: .brightness, value: target)
@@ -604,20 +671,11 @@ struct NativePlayerView: View {
 
     private func toggleFullscreen() {
         landscape.toggle()
-        fillScreen = landscape
         Orientation.apply(landscape: landscape)
         scheduleHide()
     }
 
     private func timeText(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "00:00" }
-        let total = Int(seconds.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        if h > 0 {
-            return String(format: "%d:%02d:%02d", h, m, s)
-        }
-        return String(format: "%02d:%02d", m, s)
+        PlayHUDView.timeText(seconds)
     }
 }
