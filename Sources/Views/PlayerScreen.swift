@@ -94,8 +94,16 @@ struct PlayerScreen: View {
     /// 播放器内切集后的当前目标（nil = 还在播进入时的那一集）
     @State private var override: PlayTarget?
     @State private var showingPicker = false
+    /// 嗅探链路是否已解析出直链进入原生播放（进入后顶部 × 隐藏，由控制层接管）
+    @State private var sniffNative = false
 
     private var current: PlayTarget { override ?? target }
+
+    /// 原生播放（直链或嗅探成功）：所有按钮都在控制层里，跟随显隐；
+    /// 嗅探中 / 平台网页 / 失败提示：保留右上角 × 作为唯一退出途径
+    private var nativePlayback: Bool {
+        PlaybackRouter.isDirect(current.url) || sniffNative
+    }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -104,7 +112,7 @@ struct PlayerScreen: View {
             content
                 .id(current.id)
 
-            VStack(alignment: .trailing, spacing: 10) {
+            if !nativePlayback {
                 Button {
                     dismiss()
                 } label: {
@@ -112,24 +120,9 @@ struct PlayerScreen: View {
                         .font(.system(size: 28))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.white.opacity(0.9), .black.opacity(0.45))
-                }
-
-                // 选集入口：有多集才显示
-                if current.episodes.count > 1 {
-                    Button {
-                        showingPicker = true
-                    } label: {
-                        Image(systemName: "list.number")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(.black.opacity(0.45), in: Circle())
-                            .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
-                    }
-                    .accessibilityLabel("选集")
+                        .padding(14)
                 }
             }
-            .padding(14)
         }
         .onAppear { Self.activateAudioSession() }
         .sheet(isPresented: $showingPicker) {
@@ -164,7 +157,9 @@ struct PlayerScreen: View {
                 episodeIndex: current.episodeIndex,
                 episodeCount: current.episodes.count,
                 onPrev: current.hasPrevEpisode ? { switchEpisode(current.episodeIndex - 1) } : nil,
-                onNext: current.hasNextEpisode ? { switchEpisode(current.episodeIndex + 1) } : nil
+                onNext: current.hasNextEpisode ? { switchEpisode(current.episodeIndex + 1) } : nil,
+                onClose: { dismiss() },
+                onPickEpisode: current.episodes.count > 1 ? { showingPicker = true } : nil
             )
             .ignoresSafeArea()
         } else if let platform = PlatformLink.platform(of: current.url) {
@@ -176,7 +171,16 @@ struct PlayerScreen: View {
                 urlString: current.url,
                 parses: state.parses,
                 startAt: current.startAt,
-                onProgress: recordProgress
+                onProgress: recordProgress,
+                onNativeChange: { native in
+                    sniffNative = native
+                },
+                episodeIndex: current.episodeIndex,
+                episodeCount: current.episodes.count,
+                onPrev: current.hasPrevEpisode ? { switchEpisode(current.episodeIndex - 1) } : nil,
+                onNext: current.hasNextEpisode ? { switchEpisode(current.episodeIndex + 1) } : nil,
+                onClose: { dismiss() },
+                onPickEpisode: current.episodes.count > 1 ? { showingPicker = true } : nil
             )
             .ignoresSafeArea()
         }
@@ -206,6 +210,7 @@ struct PlayerScreen: View {
     }
 
     private func apply(episode: PlayEpisode, index: Int, url: String) {
+        sniffNative = false
         override = PlayTarget(
             url: url,
             title: episode.name,
@@ -291,11 +296,20 @@ struct SniffingPlayer: View {
     let parses: [Parse]
     var startAt: Double = 0
     var onProgress: ((Double, Double) -> Void)? = nil
+    /// 嗅探成功进入原生播放时回调 true，离开该状态回调 false
+    var onNativeChange: ((Bool) -> Void)? = nil
+    /// 以下透传给嗅探成功后的原生播放器
+    var episodeIndex: Int = 0
+    var episodeCount: Int = 1
+    var onPrev: (() -> Void)? = nil
+    var onNext: (() -> Void)? = nil
+    var onClose: (() -> Void)? = nil
+    var onPickEpisode: (() -> Void)? = nil
 
     @State private var phase: Phase = .sniffing
     @State private var sniffedURL: URL?
 
-    enum Phase { case sniffing, playing, webview, page, failed }
+    enum Phase: Equatable { case sniffing, playing, webview, page, failed }
 
     var body: some View {
         switch phase {
@@ -312,7 +326,17 @@ struct SniffingPlayer: View {
             .task { await resolve() }
         case .playing:
             if let url = sniffedURL {
-                NativePlayerView(url: url, startAt: startAt, onProgress: onProgress)
+                NativePlayerView(
+                    url: url,
+                    startAt: startAt,
+                    onProgress: onProgress,
+                    episodeIndex: episodeIndex,
+                    episodeCount: episodeCount,
+                    onPrev: onPrev,
+                    onNext: onNext,
+                    onClose: onClose,
+                    onPickEpisode: onPickEpisode
+                )
             }
         case .webview:
             if let parse = parses.first(where: { $0.type != 1 }),
@@ -330,6 +354,9 @@ struct SniffingPlayer: View {
             }
         case .failed:
             failureView
+        }
+        .onChange(of: phase) { newPhase in
+            onNativeChange?(newPhase == .playing)
         }
     }
 

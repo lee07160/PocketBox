@@ -260,6 +260,10 @@ struct NativePlayerView: View {
     var onPrev: (() -> Void)? = nil
     /// 播下一集（跳过片尾按钮 / 自动连播共用）
     var onNext: (() -> Void)? = nil
+    /// 关闭播放器（× 跟随控制层显隐）
+    var onClose: (() -> Void)? = nil
+    /// 打开选集面板（底部控制条「选集」文字按钮）
+    var onPickEpisode: (() -> Void)? = nil
 
     /// 片头一般 60~90 秒，固定跳到 90s；片尾临近结尾 90s 内出按钮
     private static let introSeconds = 90.0
@@ -411,6 +415,21 @@ struct NativePlayerView: View {
 
     private var controlOverlay: some View {
         VStack(spacing: 0) {
+            // 顶部：关闭 ×（跟随控制层显隐）
+            HStack {
+                Spacer()
+                if let onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white.opacity(0.9), .black.opacity(0.45))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 10)
+
             Spacer(minLength: 0)
 
             // 跳过片头 / 跳过片尾（条件显示）
@@ -548,6 +567,20 @@ struct NativePlayerView: View {
                     .buttonStyle(.plain)
                     .disabled(episodeIndex + 1 >= episodeCount)
                     .accessibilityLabel("下一集")
+                }
+
+                // 选集入口：多集时显示，放在全屏键旁边
+                if episodeCount > 1, let onPickEpisode {
+                    Button(action: onPickEpisode) {
+                        Text("选集")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .frame(height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("选集")
                 }
 
                 Button {
