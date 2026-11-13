@@ -375,9 +375,12 @@ struct AggregatedDetailView: View {
         }
     }
 
-    /// 带上当前选中的源，便于写播放历史 / 从历史续播
+    /// 带上当前选中的源与整季集列表，播放时才能写历史、在播放器里切集
     private func makeTarget(url: String, episode: Episode, site: Site, startAt: Double) -> PlayTarget {
-        PlayTarget(
+        let item = loaded ?? hit.item
+        let group = item.groups.first { g in g.episodes.contains { $0.id == episode.id } }
+        let index = group?.episodes.firstIndex { $0.id == episode.id } ?? 0
+        return PlayTarget(
             url: url,
             title: episode.name,
             siteKey: hit.siteKey,
@@ -385,7 +388,9 @@ struct AggregatedDetailView: View {
             vodId: current.id,
             vodName: current.name,
             pic: current.pic,
-            startAt: startAt
+            startAt: startAt,
+            episodes: (group?.episodes ?? []).map { PlayEpisode(name: $0.name, url: $0.url) },
+            episodeIndex: index
         )
     }
 }

@@ -193,6 +193,12 @@ struct HistoryRecord: Codable, Identifiable, Hashable {
 
 // MARK: - 播放目标
 
+/// 播放器内用的轻量集信息（选集 / 上下集切换 / 自动连播）
+struct PlayEpisode: Hashable {
+    var name: String
+    var url: String
+}
+
 struct PlayTarget: Identifiable, Hashable {
     var id = UUID()
     var url: String
@@ -205,10 +211,17 @@ struct PlayTarget: Identifiable, Hashable {
     var pic: String = ""
     /// 从历史续播时的起播秒数
     var startAt: Double = 0
+    /// 当前线路的整季集列表，为空表示单集播放（无选集/上下集）
+    var episodes: [PlayEpisode] = []
+    /// 当前集在 episodes 里的下标
+    var episodeIndex: Int = 0
 
     var hasHistoryContext: Bool {
         !siteKey.isEmpty && !vodId.isEmpty && !vodName.isEmpty
     }
+
+    var hasNextEpisode: Bool { episodeIndex + 1 < episodes.count }
+    var hasPrevEpisode: Bool { episodeIndex > 0 && episodeIndex < episodes.count }
 }
 
 // MARK: - 错误展示

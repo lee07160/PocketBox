@@ -254,6 +254,16 @@ struct NativePlayerView: View {
     var onProgress: ((Double, Double) -> Void)? = nil
     /// 播放地址确定后回调（嗅探出的直链），可用于更新历史里的可复用地址
     var onResolved: ((String) -> Void)? = nil
+    /// 集信息：episodeCount > 1 时显示上一集/下一集与跳过片尾
+    var episodeIndex: Int = 0
+    var episodeCount: Int = 1
+    var onPrev: (() -> Void)? = nil
+    /// 播下一集（跳过片尾按钮 / 自动连播共用）
+    var onNext: (() -> Void)? = nil
+
+    /// 片头一般 60~90 秒，固定跳到 90s；片尾临近结尾 90s 内出按钮
+    private static let introSeconds = 90.0
+    private static let outroSeconds = 90.0
 
     @StateObject private var model = PlayerModel()
 
@@ -303,6 +313,11 @@ struct NativePlayerView: View {
         }
         .onChange(of: progressBucket) { _ in
             onProgress?(model.position, model.duration)
+        }
+        .onChange(of: model.finished) { done in
+            // 自动连播：播完且还有下一集时自动切（无下一集则保留重播按钮）
+            guard done, let onNext, episodeIndex + 1 < episodeCount else { return }
+            onNext()
         }
         .onDisappear {
             onProgress?(model.position, model.duration)
@@ -398,6 +413,10 @@ struct NativePlayerView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
 
+            // 跳过片头 / 跳过片尾（条件显示）
+            skipButtons
+                .padding(.bottom, 14)
+
             Button {
                 model.togglePlay()
                 scheduleHide()
@@ -418,9 +437,77 @@ struct NativePlayerView: View {
         .padding(.bottom, 10)
     }
 
+    // MARK: 跳过片头 / 片尾
+
+    /// 片头区间（前 90 秒）显示「跳过片头」
+    private var showSkipIntro: Bool {
+        !scrubbing
+            && model.position > 3
+            && model.position < Self.introSeconds
+            && model.duration > Self.introSeconds * 2.5
+    }
+
+    /// 临近结尾（剩 90 秒内）且还有下一集时显示「跳过片尾」
+    private var showSkipOutro: Bool {
+        !scrubbing
+            && model.duration > 300
+            && model.position > 3
+            && model.duration - model.position < Self.outroSeconds
+            && episodeIndex + 1 < episodeCount
+            && !model.finished
+    }
+
+    @ViewBuilder
+    private var skipButtons: some View {
+        if showSkipIntro {
+            Button {
+                model.endScrub(at: Self.introSeconds)
+                scheduleHide()
+            } label: {
+                Label("跳过片头", systemImage: "forward.end.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.3), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        } else if showSkipOutro {
+            Button {
+                onNext?()
+            } label: {
+                Label("跳过片尾", systemImage: "forward.end.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.3), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var bottomBar: some View {
         VStack(spacing: 6) {
             HStack(spacing: 10) {
+                // 上一集 / 下一集（多集时显示）
+                if episodeCount > 1 {
+                    Button {
+                        onPrev?()
+                    } label: {
+                        Image(systemName: "backward.end.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(episodeIndex > 0 ? .white : .white.opacity(0.3))
+                            .frame(width: 30, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(episodeIndex == 0)
+                    .accessibilityLabel("上一集")
+                }
+
                 Text(timeText(scrubbing ? scrubValue : model.position))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.white)
@@ -447,6 +534,21 @@ struct NativePlayerView: View {
                 Text(timeText(model.duration))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.7))
+
+                if episodeCount > 1 {
+                    Button {
+                        onNext?()
+                    } label: {
+                        Image(systemName: "forward.end.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(episodeIndex + 1 < episodeCount ? .white : .white.opacity(0.3))
+                            .frame(width: 30, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(episodeIndex + 1 >= episodeCount)
+                    .accessibilityLabel("下一集")
+                }
 
                 Button {
                     toggleFullscreen()

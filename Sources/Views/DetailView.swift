@@ -228,9 +228,12 @@ struct DetailView: View {
         }
     }
 
-    /// 带上站点/影片信息，播放时才能写进历史记录
+    /// 带上站点/影片信息与整季集列表，播放时才能写历史、在播放器里切集
     private func makeTarget(url: String, episode: Episode, site: Site, startAt: Double) -> PlayTarget {
-        PlayTarget(
+        // 找到这一集所属的线路，把整季传给播放器（选集/上下集/自动连播用）
+        let group = current.groups.first { g in g.episodes.contains { $0.id == episode.id } }
+        let index = group?.episodes.firstIndex { $0.id == episode.id } ?? 0
+        return PlayTarget(
             url: url,
             title: episode.name,
             siteKey: siteKey,
@@ -238,7 +241,9 @@ struct DetailView: View {
             vodId: current.id,
             vodName: current.name,
             pic: current.pic,
-            startAt: startAt
+            startAt: startAt,
+            episodes: (group?.episodes ?? []).map { PlayEpisode(name: $0.name, url: $0.url) },
+            episodeIndex: index
         )
     }
 }

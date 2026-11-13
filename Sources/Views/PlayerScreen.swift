@@ -91,23 +91,58 @@ struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     let target: PlayTarget
 
+    /// 播放器内切集后的当前目标（nil = 还在播进入时的那一集）
+    @State private var override: PlayTarget?
+    @State private var showingPicker = false
+
+    private var current: PlayTarget { override ?? target }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
 
             content
+                .id(current.id)
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 28))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white.opacity(0.9), .black.opacity(0.45))
-                    .padding(14)
+            VStack(alignment: .trailing, spacing: 10) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white.opacity(0.9), .black.opacity(0.45))
+                }
+
+                // 选集入口：有多集才显示
+                if current.episodes.count > 1 {
+                    Button {
+                        showingPicker = true
+                    } label: {
+                        Image(systemName: "list.number")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(.black.opacity(0.45), in: Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
+                    }
+                    .accessibilityLabel("选集")
+                }
             }
+            .padding(14)
         }
         .onAppear { Self.activateAudioSession() }
+        .sheet(isPresented: $showingPicker) {
+            EpisodePickerSheet(
+                episodes: current.episodes,
+                currentIndex: current.episodeIndex,
+                vodName: current.vodName
+            ) { index in
+                showingPicker = false
+                switchEpisode(index)
+            }
+            .environment(\.colorScheme, .dark)
+        }
     }
 
     /// 声明为正式媒体播放会话：
@@ -121,40 +156,132 @@ struct PlayerScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        if PlaybackRouter.isDirect(target.url), let url = URL(string: target.url) {
-            NativePlayerView(url: url, startAt: target.startAt, onProgress: recordProgress)
-                .ignoresSafeArea()
-        } else if let platform = PlatformLink.platform(of: target.url) {
+        if PlaybackRouter.isDirect(current.url), let url = URL(string: current.url) {
+            NativePlayerView(
+                url: url,
+                startAt: current.startAt,
+                onProgress: recordProgress,
+                episodeIndex: current.episodeIndex,
+                episodeCount: current.episodes.count,
+                onPrev: current.hasPrevEpisode ? { switchEpisode(current.episodeIndex - 1) } : nil,
+                onNext: current.hasNextEpisode ? { switchEpisode(current.episodeIndex + 1) } : nil
+            )
+            .ignoresSafeArea()
+        } else if let platform = PlatformLink.platform(of: current.url) {
             // 腾讯/爱奇艺/优酷… 的网页地址，页面里本来就没有 m3u8，嗅探纯浪费 3~5 秒
-            PlatformWebPlayer(platform: platform, urlString: target.url)
+            PlatformWebPlayer(platform: platform, urlString: current.url)
                 .ignoresSafeArea()
         } else {
             SniffingPlayer(
-                urlString: target.url,
+                urlString: current.url,
                 parses: state.parses,
-                startAt: target.startAt,
+                startAt: current.startAt,
                 onProgress: recordProgress
             )
             .ignoresSafeArea()
         }
     }
 
+    // MARK: 切集
+
+    /// 切到指定集。T4/drpy 源的集地址是播放页，需要先向服务端换直链。
+    private func switchEpisode(_ index: Int) {
+        let episodes = current.episodes
+        guard episodes.indices.contains(index) else { return }
+        let episode = episodes[index]
+
+        if state.site(withKey: current.siteKey)?.needsPlayResolve == true,
+           let site = state.site(withKey: current.siteKey) {
+            Task {
+                do {
+                    let resolved = try await Type4Service.resolve(site: site, episodeURL: episode.url)
+                    apply(episode: episode, index: index, url: resolved.url.absoluteString)
+                } catch {
+                    state.toast = "第 \(index + 1) 集解析失败：\(error.localizedDescription)"
+                }
+            }
+        } else {
+            apply(episode: episode, index: index, url: episode.url)
+        }
+    }
+
+    private func apply(episode: PlayEpisode, index: Int, url: String) {
+        override = PlayTarget(
+            url: url,
+            title: episode.name,
+            siteKey: current.siteKey,
+            siteName: current.siteName,
+            vodId: current.vodId,
+            vodName: current.vodName,
+            pic: current.pic,
+            startAt: 0,
+            episodes: current.episodes,
+            episodeIndex: index
+        )
+    }
+
     /// 写播放历史：播放器每 15 秒回调一次，退出时再补一次
     private func recordProgress(_ position: Double, _ duration: Double) {
-        guard target.hasHistoryContext else { return }
+        guard current.hasHistoryContext else { return }
         let record = HistoryRecord(
-            siteKey: target.siteKey,
-            siteName: target.siteName,
-            vodId: target.vodId,
-            vodName: target.vodName,
-            pic: target.pic,
-            episodeName: target.title,
-            url: target.url,
+            siteKey: current.siteKey,
+            siteName: current.siteName,
+            vodId: current.vodId,
+            vodName: current.vodName,
+            pic: current.pic,
+            episodeName: current.title,
+            url: current.url,
             position: position,
             duration: duration,
             updatedAt: Date()
         )
         state.recordHistory(record)
+    }
+}
+
+/// 播放器内的选集面板：网格列出当前线路的所有集，当前集高亮
+struct EpisodePickerSheet: View {
+    let episodes: [PlayEpisode]
+    let currentIndex: Int
+    let vodName: String
+    let onSelect: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 10)], spacing: 10) {
+                    ForEach(Array(episodes.enumerated()), id: \.offset) { index, episode in
+                        Button {
+                            onSelect(index)
+                        } label: {
+                            Text(episode.name.isEmpty ? "\(index + 1)" : episode.name)
+                                .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 40)
+                                .background(
+                                    index == currentIndex ? Color.orange : Color.white.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                )
+                                .foregroundStyle(index == currentIndex ? .black : .white.opacity(0.85))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle(vodName.isEmpty ? "选集" : "选集 · \(vodName)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
