@@ -24,6 +24,21 @@ struct DoubanView: View {
                 content
             }
             .navigationTitle("豆瓣热榜")
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink(value: Route.favoritesPage) {
+                        Image(systemName: "heart")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink(value: Route.historyPage) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             .pocketDestinations()
             .task { await loadIfNeeded(board) }
             .onChange(of: media) { value in

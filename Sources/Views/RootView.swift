@@ -6,6 +6,8 @@ enum Route: Hashable {
     case detail(siteKey: String, item: VodItem)
     case aggregate(hits: [SearchHit])
     case douban(subject: DoubanSubject)
+    case favoritesPage
+    case historyPage
 }
 
 struct RootView: View {
@@ -13,11 +15,11 @@ struct RootView: View {
 
     var body: some View {
         TabView {
-            HomeView()
-                .tabItem { Label("站点", systemImage: "square.grid.2x2") }
-
             DoubanView()
                 .tabItem { Label("推荐", systemImage: "flame") }
+
+            HomeView()
+                .tabItem { Label("站点", systemImage: "square.grid.2x2") }
 
             LiveView()
                 .tabItem { Label("直播", systemImage: "tv") }
@@ -47,6 +49,14 @@ extension View {
                 AggregatedDetailView(hits: hits)
             case .douban(let subject):
                 DoubanDetailView(subject: subject)
+            case .favoritesPage:
+                FavoritesView()
+                    .navigationTitle("收藏")
+                    .navigationBarTitleDisplayMode(.inline)
+            case .historyPage:
+                HistoryView()
+                    .navigationTitle("历史播放")
+                    .navigationBarTitleDisplayMode(.inline)
             }
         }
     }
