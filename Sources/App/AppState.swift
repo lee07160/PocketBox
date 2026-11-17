@@ -29,6 +29,7 @@ final class AppState: ObservableObject {
     init() {
         restore()
         ensureBuiltInSites()
+        ensureBuiltInLives()
     }
 
     /// 把出厂内置站点合并进站点列表（按 key 或 api 去重，不覆盖用户已有的同名站点）。
@@ -39,6 +40,17 @@ final class AppState: ObservableObject {
             let exists = sites.contains { $0.key == site.key || $0.api == site.api }
             guard !exists else { continue }
             sites.append(site)
+            added += 1
+        }
+        if added > 0 { save() }
+    }
+
+    /// 把出厂内置直播源合并进直播列表（按 url 去重，不覆盖用户已导入的）
+    private func ensureBuiltInLives() {
+        var added = 0
+        for live in BuiltInCatalog.lives {
+            guard !lives.contains(where: { $0.url == live.url || $0.name == live.name }) else { continue }
+            lives.append(live)
             added += 1
         }
         if added > 0 { save() }

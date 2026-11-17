@@ -65,4 +65,14 @@ enum BuiltInCatalog {
             playerType: ""
         )
     }
+
+    // MARK: 出厂内置直播源（2026-11 实测）
+    // ① zbds：560 频道 12 分组，央视/卫视主力抽样 7/12 可播，综合最优
+    // ② Guovin iptv-api：仓库每日自动测速筛选，1616 频道，走 jsdelivr 加速
+    // ③ 有魂直播：7000+ 频道含港澳台/体育/电影轮播，量大当备用仓
+    static let lives: [LiveSource] = [
+        LiveSource(name: "精选直播 · 央视卫视", url: "https://live.zbds.top/tv/iptv4.txt", epg: ""),
+        LiveSource(name: "聚合直播 · 每日精选", url: "https://cdn.jsdelivr.net/gh/Guovin/iptv-api@gd/output/result.m3u", epg: ""),
+        LiveSource(name: "海量直播 · 备用仓", url: "https://www.iyouhun.com/tv/zb", epg: ""),
+    ]
 }

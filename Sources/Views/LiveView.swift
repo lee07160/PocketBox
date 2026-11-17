@@ -9,7 +9,7 @@ struct LiveView: View {
                 if state.lives.isEmpty {
                     EmptyHint(
                         title: "没有直播源",
-                        message: "接口里的 lives 字段是空的，导入一个带直播的接口就能看了"
+                        message: "接口里的 lives 字段是空的，可以到「我的 · 设置」里导入一个带直播的接口"
                     )
                     .frame(height: 280)
                     .listRowBackground(Color.clear)
